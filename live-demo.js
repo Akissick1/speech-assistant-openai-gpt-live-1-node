@@ -19,49 +19,10 @@ const VOICE = 'marin';
 const USER_AGENT = 'twilio-demos/Node 1.0.0';
 const PORT = process.env.PORT || 5050;
 
-const OPENING = "Hi there! I am an AI voice assistant powered by Twilio and OpenAI's GPT-Live. How can I help?";
-const VOICE_PROMPT = "You are an AI voice assistant powered by Twilio and OpenAI's GPT-Live. "
-    + 'Never call yourself ChatGPT. '
-    + 'You are helpful and bubbly, love to chat about anything the caller is interested in, and are prepared to offer facts. '
-    + 'You have a penchant for dad jokes, owl jokes, and rickrolling – subtly. '
-    + 'Always stay positive, but work in a joke when appropriate. '
-    + 'You can look up the top headline for any city, and you can search the web for real facts. '
-    + 'If the caller asks what you can do, tell them those two things. '
-    + 'Name the city you are looking up so the lookup is unambiguous.';
-const BACKEND_PROMPT = 'Use get_top_headline for the local headline of the day and web_search for real facts. '
-    + 'Answer in one or two sentences.';
-
-const TOOLS = [
-    { type: 'web_search' },
-    {
-        type: 'function',
-        name: 'get_top_headline',
-        description: "Get today's top headline for a city.",
-        parameters: {
-            type: 'object',
-            properties: { city: { type: 'string' } },
-            required: ['city'],
-            additionalProperties: false
-        }
-    }
-];
-
-const HEADLINES = [
-    'Fusion plant comes online; residents petition to have it moved next to the airport',
-    'Traffic permanently solved by new roundabout. 400 citizens now on their third hour circling it',
-    'Mayor renames every street "Main Street"',
-    'Godzilla attack downgraded to "moderate inconvenience" by tourism board',
-    'City votes to replace bus network with a single party bike',
-    'New arcology opens to complaints the clouds are too close',
-    'Water treatment plant water rated "mostly delicious" by local food critic',
-];
-
-// Mock tool call with fake data, slow on purpose.
-const getTopHeadline = async ({ city }) => {
-    console.log('Reticulating splines...');
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    return { city, headline: HEADLINES[Math.floor(Math.random() * HEADLINES.length)] };
-};
+const OPENING = "Good morning, Ashley Kissick Financial Advisers, Jess speaking. How can I help?";
+const VOICE_PROMPT = `You are Jess, a friendly, concise, professional British English AI receptionist for Ashley Kissick Financial Advisers. Introduce yourself as Jess at the beginning of every call. Do not claim to be human or conceal that you are an AI if asked directly. Never mention the software vendors unless asked directly. Speak naturally, briefly, and without jokes or small talk. Listen patiently through pauses, hesitations, spelled names and phone numbers; do not interrupt. Ask one question at a time and remember details already provided. Do not give financial advice or ask for account numbers, passwords, financial documents, or other sensitive financial information. During Monday-Friday 09:00-17:00 Europe/London, collect the caller's name and brief reason and explain that you will arrange for Ashley to speak with them. IMPORTANT: Live call transfer is NOT YET IMPLEMENTED in this test version. Never claim you are transferring or have transferred a call. If asked to transfer, explain politely that you can take a callback message during testing. Outside those hours take a message and explain it will be passed on when the office reopens. Do not promise a particular callback time. For callback numbers, prefer confirming caller ID when available, but do not claim to know caller ID unless it is explicitly provided. Repeat digits in natural groups, interpreting 'oh' as zero, and wait for an explicit confirmation. If uncertain, ask for correction, never guess or invent a digit. Appointments may be requested for Tuesday, Wednesday, Thursday at 11:00 or 14:00 UK time: telephone 30 minutes with 2 hours' notice, Google Meet 60 minutes with 24 hours' notice, in-person 60 minutes with 48 hours' notice. IMPORTANT: Calendar lookup, booking, email sending and Google Meet creation are NOT YET IMPLEMENTED. You may take an appointment request but must never claim availability, a booking, email delivery or a Meet link has been confirmed. Do not claim a message was saved or sent: this test application currently does not persist messages. The current calls are fictional test calls only.`;
+const BACKEND_PROMPT = 'Respond as Jess, briefly and professionally. Do not invent tool results or imply any transfer, booking or message delivery occurred.';
+const TOOLS = [];
 
 const fastify = Fastify();
 fastify.register(fastifyFormBody);
@@ -126,7 +87,7 @@ fastify.register(async (fastify) => {
                 if (event.type === 'session.started') {
                     sessionReady = true;
                     // Quote this ID if you ever need OpenAI's help with a call.
-                    console.log('GPT-Live-1 session', event.session?.id);
+                    console.log('GPT-Live-1 session started');
                     send({ type: 'session.instructions.append', delegation_id: null,
                         content: `Your first spoken line on this call is, verbatim: "${OPENING}"` });
                     send({ type: 'session.commentary.append', delegation_id: null, content: OPENING });
@@ -136,7 +97,7 @@ fastify.register(async (fastify) => {
                     && event.event?.type === 'response.output_item.done'
                     && event.event.item?.type === 'function_call' && event.event.item.status === 'completed') {
                     const { call_id, name, arguments: args } = event.event.item;
-                    console.log('Tool call:', name, args);
+                    // Do not log tool arguments: they may contain personal information.
                     const output = name === 'get_top_headline'
                         ? await getTopHeadline(JSON.parse(args))
                         : { error: 'unknown tool' };
@@ -144,7 +105,7 @@ fastify.register(async (fastify) => {
                         item: { type: 'function_call_output', call_id, output: JSON.stringify(output) } });
                     send({ type: 'response.create' });
                 } else if (event.type === 'session.output_transcript.delta') {
-                    console.log('Assistant:', event.delta);
+                    // Do not log caller-facing transcript fragments.
                 } else if (event.type === 'error') {
                     console.error('GPT-Live-1 error:', event.error);
                 }
@@ -159,7 +120,7 @@ fastify.register(async (fastify) => {
                     send({ type: 'session.input_audio.append', audio: data.media.payload });
                 } else if (data.event === 'start') {
                     streamSid = data.start.streamSid;
-                    console.log('Incoming stream has started', streamSid);
+                    console.log('Incoming stream has started');
                     startSession();
                 } else if (data.event === 'stop') {
                     close();
@@ -177,7 +138,7 @@ fastify.register(async (fastify) => {
     });
 });
 
-fastify.listen({ port: PORT }, (err) => {
+fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`Server is listening on port ${PORT}`);
 });
