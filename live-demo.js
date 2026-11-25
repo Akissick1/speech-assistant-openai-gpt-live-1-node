@@ -170,6 +170,9 @@ fastify.get('/', async () => ({ message: 'Twilio Media Stream Server is running!
 const RECORD_CALLS = process.env.RECORD_CALLS !== 'false';
 
 fastify.all('/incoming-call', async (request, reply) => {
+    // Keep existing dummy calls working during setup. Once an Auth Token is
+    // configured, reject forged inbound call instructions as well.
+    if (twilioAuthToken && !isSignedTwilioWebhook(request)) return reply.code(403).send();
     const host = request.headers['x-forwarded-host'] || request.headers.host;
     const toNumber = String(request.body?.To || '');
     reply.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
