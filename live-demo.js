@@ -33,7 +33,8 @@ const apiKeySid = process.env.TWILIO_API_KEY_SID || process.env.TWILLIO_API_KEY_
 const apiKeySecret = process.env.TWILIO_API_KEY_SECRET || process.env.TWILLIO_API_KEY_SECRET;
 const smsNotifyTo = process.env.AKFA_SMS_NOTIFY_TO || '';
 const smsTestEnabled = process.env.ENABLE_TEST_SMS === 'true';
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
+// Support the existing sealed Railway token saved under a misspelled legacy name.
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || process.env.TWILLIO_AUTH_TOKEN || '';
 // Require BOTH a feature flag and a webhook validation credential.
 // This must not run for real financial-advice clients before security review.
 const testTransferEnabled = process.env.ENABLE_TEST_TRANSFERS === 'true' && Boolean(twilioAuthToken);
