@@ -32,8 +32,8 @@ const apiKeySid = process.env.TWILIO_API_KEY_SID || process.env.TWILLIO_API_KEY_
 const apiKeySecret = process.env.TWILIO_API_KEY_SECRET || process.env.TWILLIO_API_KEY_SECRET;
 const smsNotifyTo = process.env.AKFA_SMS_NOTIFY_TO || '';
 const smsTestEnabled = process.env.ENABLE_TEST_SMS === 'true';
-const isE164 = (value) => /^\\+[1-9]\\d{7,14}$/.test(value || '');
-const cleanField = (value, maxLength) => String(value || '').replace(/[\\r\\n\\t]+/g, ' ').trim().slice(0, maxLength);
+const isE164 = (value) => /^\+[1-9]\d{7,14}$/.test(value || '');
+const cleanField = (value, maxLength) => String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, maxLength);
 const xmlEscape = (value) => String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const TOOLS = [{
     type: 'function',
