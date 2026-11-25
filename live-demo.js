@@ -76,6 +76,24 @@ async function sendCallbackSms(args, fromNumber) {
     }
 }
 
+// Retrieve caller ID from Twilio's authenticated Call record, not from user-supplied audio
+// or unverified webhook data. Never log the caller number.
+async function getTwilioCallerId(callSid, calledNumber) {
+    if (!accountSid || !apiKeySid || !apiKeySecret || !/^CA[0-9a-fA-F]{32}$/.test(callSid || '')) return '';
+    if (!isE164(calledNumber)) return '';
+    try {
+        const client = twilio(apiKeySid, apiKeySecret, { accountSid, timeout: 2500 });
+        const call = await client.calls(callSid).fetch();
+        // Only trust the call record when it matches the inbound call and destination.
+        if (call.accountSid !== accountSid || call.direction !== 'inbound' || call.to !== calledNumber) return '';
+        return isE164(call.from) ? call.from : '';
+    } catch (error) {
+        // Do not print the call record, caller number or API credentials.
+        console.warn('Caller ID lookup unavailable; Twilio status:', error.status || 'unknown');
+        return '';
+    }
+}
+
 const fastify = Fastify();
 fastify.register(fastifyFormBody);
 fastify.register(fastifyWs);
@@ -100,6 +118,7 @@ fastify.register(async (fastify) => {
         let sessionRequested = false;
         let sessionReady = false;
         let twilioReceivingNumber = '';
+        let twilioCallSid = '';
         let smsAlreadyAttempted = false;
 
         const openAiWs = new WebSocket('wss://api.openai.com/v1/live/sessions', {
@@ -119,12 +138,17 @@ fastify.register(async (fastify) => {
         };
 
         // Wait for Twilio's stream ID before starting the session.
-        const startSession = () => {
+        const startSession = async () => {
             if (sessionRequested || !streamSid || openAiWs.readyState !== WebSocket.OPEN) return;
             sessionRequested = true;
+            const callerNumber = await getTwilioCallerId(twilioCallSid, twilioReceivingNumber);
+            if (connection.readyState !== WebSocket.OPEN || openAiWs.readyState !== WebSocket.OPEN) return;
+            const callerContext = callerNumber
+                ? `Twilio's call record shows the incoming caller ID as ${callerNumber}. This is a network-provided number, not proof of identity. When collecting a callback number, first ask whether they are calling from the number ending in ${callerNumber.slice(-4)}. Do not read the full number aloud unless requested, and never rely on it to authenticate the caller. If they confirm, you can use the full caller ID as the callback number; if not, ask for their preferred number.`
+                : 'Caller ID was withheld or unavailable. Do not guess or claim to know it. Ask for the preferred callback number.';
             send({ type: 'session.start', session: {
                 model: MODEL,
-                instructions: VOICE_PROMPT,
+                instructions: VOICE_PROMPT + '\n' + callerContext,
                 audio: { format: { type: 'audio/pcmu', rate: 8000 }, output: { voice: VOICE } },
                 delegation: {
                     type: 'responses',
@@ -184,6 +208,7 @@ fastify.register(async (fastify) => {
                     send({ type: 'session.input_audio.append', audio: data.media.payload });
                 } else if (data.event === 'start') {
                     streamSid = data.start.streamSid;
+                    twilioCallSid = String(data.start.callSid || '');
                     twilioReceivingNumber = String(data.start.customParameters?.twilio_to || '');
                     console.log('Incoming stream has started');
                     startSession();
