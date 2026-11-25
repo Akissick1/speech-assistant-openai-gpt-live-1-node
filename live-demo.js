@@ -89,7 +89,7 @@ fastify.all('/incoming-call', async (request, reply) => {
     const host = request.headers['x-forwarded-host'] || request.headers.host;
     const toNumber = String(request.body?.To || '');
     reply.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>${RECORD_CALLS ? '<Start><Recording recordingChannels="dual" trim="do-not-trim" /></Start>' : ''}<Connect><Stream url="wss://${host}/media-stream"><Parameter name="twilio_to" value="${xmlEscape(toNumber)}" /></Stream></Connect></Response>`);
+<Response><Pause length="9" />${RECORD_CALLS ? '<Start><Recording recordingChannels="dual" trim="do-not-trim" /></Start>' : ''}<Connect><Stream url="wss://${host}/media-stream"><Parameter name="twilio_to" value="${xmlEscape(toNumber)}" /></Stream></Connect></Response>`);
 });
 
 fastify.register(async (fastify) => {
