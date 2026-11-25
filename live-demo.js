@@ -30,10 +30,13 @@ fastify.register(fastifyWs);
 
 fastify.get('/', async () => ({ message: 'Twilio Media Stream Server is running!' }));
 
+// Record every call (dual channel: caller and Jess separately). Set RECORD_CALLS=false on Railway to switch off.
+const RECORD_CALLS = process.env.RECORD_CALLS !== 'false';
+
 fastify.all('/incoming-call', async (request, reply) => {
     const host = request.headers['x-forwarded-host'] || request.headers.host;
     reply.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Connect><Stream url="wss://${host}/media-stream" /></Connect></Response>`);
+<Response>${RECORD_CALLS ? '<Start><Recording recordingChannels="dual" trim="do-not-trim" /></Start>' : ''}<Connect><Stream url="wss://${host}/media-stream" /></Connect></Response>`);
 });
 
 fastify.register(async (fastify) => {
