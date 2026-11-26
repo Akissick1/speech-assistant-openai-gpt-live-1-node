@@ -29,7 +29,7 @@ if (!/^\+[1-9]\d{6,14}$/.test(TO)) {
     process.exit(1);
 }
 
-const MODEL = 'gpt-live-1';
+const MODEL = 'gpt-live-1.1';
 const DELEGATED_MODEL = 'gpt-5.6-terra';
 const VOICE = 'marin';
 const USER_AGENT = 'twilio-demos/Node 1.0.0';
