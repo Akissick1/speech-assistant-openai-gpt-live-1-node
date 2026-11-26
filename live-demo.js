@@ -15,7 +15,7 @@ if (!OPENAI_API_KEY) {
     process.exit(1);
 }
 
-const MODEL = 'gpt-live-1';
+const MODEL = 'gpt-live-1.1';
 const DELEGATED_MODEL = 'gpt-5.6-terra';
 const VOICE = 'halo'; // GPT-Live's built-in British English feminine voice
 const USER_AGENT = 'twilio-demos/Node 1.0.0';
