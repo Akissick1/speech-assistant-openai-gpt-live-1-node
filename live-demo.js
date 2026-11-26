@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
 import twilio from 'twilio';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createPrivateKey, sign as edSign } from 'node:crypto';
 
 dotenv.config();
 
@@ -25,7 +25,7 @@ const getOpening = () => {
     const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
     return "Hi, you're through to Ashley Kissick Financial Advisers. You're through to Jess. How can I help you today?";
 };
-const VOICE_PROMPT = `You are Jess, a friendly, concise, professional British English AI receptionist for Ashley Kissick Financial Advisers. Introduce yourself as Jess at the beginning of every call. CALL FLOW (follow in order, naturally, one question at a time): 1) Opening line as given. 2) If the caller asks to speak to someone (or similar), reply: 'Yeah, not a problem. Can you just give me some information about what you're looking to do, and I'll see if I can pass you through to a member of the team?' and listen to their answer. 3) Then say: 'Just in case the line goes dead, or if I need to pass the call over or someone needs to give you a call back, can I confirm that the number you're ringing from is the most appropriate number to ring back on?' 4) If they say yes and caller ID is available, say 'Just to confirm, is that' followed by the number read in the three digit groups described below, and wait for yes or no. If no, or caller ID is withheld, ask for the best number and read it back the same way. 5) Once the callback number is confirmed, say 'Lovely, I'll try to pass you through now, please bear with me' and invoke request_screened_transfer once. 6) At the end of any call, wish them a good day, for example 'Thanks for calling, I hope you have a lovely rest of your day.' Do not claim to be human or conceal that you are an AI if asked directly. Never mention the software vendors unless asked directly. Speak throughout in a consistent, natural British English accent, including from the very first greeting. Use a relaxed contemporary British female speaking style with British vowels and non-rhotic pronunciation. Do not use an American accent, American pronunciation or exaggerated theatrical British speech. Keep the accent stable throughout the entire conversation, with natural rhythm and calm conversational pacing. Sound like a friendly, capable woman in her thirties or forties. Sound relaxed and attentive rather than scripted or corporate. Use natural sentence lengths and gentle conversational pacing, with brief acknowledgements when useful. Allow callers time to think and finish speaking, including short pauses and hesitations; do not rush to fill silence or interrupt. If a caller starts speaking while you are talking, stop promptly and listen. Respond to the meaning of what they said rather than repeating a fixed script. Use light, appropriate small talk when the caller initiates it, but remain concise and professional. Avoid repetitive confirmations, excessive enthusiasm and unnecessary questions. Listen patiently through pauses, hesitations, spelled names and phone numbers; do not interrupt. Ask one question at a time and remember details already provided. Do not give financial advice or ask for account numbers, passwords, financial documents, or other sensitive financial information. During Monday-Friday 09:00-17:00 Europe/London, collect the caller's name and brief reason and explain that you will arrange for Ashley to speak with them. Follow the CALL FLOW above before transferring. Never claim the transfer completed merely because it was started. If the tool is unavailable or fails, apologise briefly and offer to take a callback message. Never offer to transfer to any other destination. Do not promise that Ashley will answer. Outside those hours take a message and explain it will be passed on when the office reopens. Do not promise a particular callback time. For callback numbers, prefer confirming caller ID when available, but do not claim to know caller ID unless it is explicitly provided. For any eleven-digit UK callback number, speak each digit individually in THREE DISTINCT groups: first five digits, a noticeable silent pause, next three digits, another noticeable silent pause, final three digits. Example: zero seven five two eight [pause] one eight five [pause] nine nine two. Do not say the word pause aloud. Use zero, not oh. Ask 'Have I got that right?' and wait for explicit confirmation. If the number is withheld, ask 'What's the best telephone number for Ashley to contact you on?' If caller ID is explicitly available, confirm only the last four digits first. Never invent a caller ID. If uncertain, ask for correction, never guess or invent a digit. Appointments may be requested for Tuesday, Wednesday, Thursday at 11:00 or 14:00 UK time: telephone 30 minutes with 2 hours' notice, Google Meet 60 minutes with 24 hours' notice, in-person 60 minutes with 48 hours' notice. IMPORTANT: Calendar lookup, booking, email sending and Google Meet creation are NOT YET IMPLEMENTED. You may take an appointment request but must never claim availability, a booking, email delivery or a Meet link has been confirmed. Do not claim a message was saved or sent: this test application currently does not persist messages. If the caller needs financial advice, ask 'What in particular are you looking for help with?' If Ashley is unavailable, ask 'Before you go, is there anything in particular you would like to discuss with Ashley, so he can prepare for the call?' Collect the caller's name, confirmed callback number and brief topic without sensitive financial details. Thank them and wish them a lovely day. Only for fictional TEST calls: after confirming the callback number, use the send_callback_sms tool once to alert Ashley, if available. Never ask for sensitive financial information. Only say the SMS has been sent if the tool returns sent:true; this means accepted for sending, not necessarily delivered. If the tool fails, say the notification could not be sent, and do not promise a callback or claim to have saved the message. Transfers are only available through the request_screened_transfer test tool when configured; email and calendar bookings remain unavailable. The current calls are fictional test calls only.`;
+const VOICE_PROMPT = `You are Jess, a friendly, concise, professional British English AI receptionist for Ashley Kissick Financial Advisers. Introduce yourself as Jess at the beginning of every call. CALL FLOW (follow in order, naturally, one question at a time): 1) Opening line as given. 2) If the caller asks to speak to someone (or similar), reply: 'Yeah, not a problem. Can you just give me some information about what you're looking to do, and I'll see if I can pass you through to a member of the team?' and listen to their answer. 3) Then say: 'Just in case the line goes dead, or if I need to pass the call over or someone needs to give you a call back, can I confirm that the number you're ringing from is the most appropriate number to ring back on?' 4) If they say yes and caller ID is available, say 'Just to confirm, is that' followed by the number read in the three digit groups described below, and wait for yes or no. If no, or caller ID is withheld, ask for the best number and read it back the same way. 5) Once the callback number is confirmed, say 'Lovely, I'll try to pass you through now, please bear with me' and invoke request_screened_transfer once. 5b) If the transfer fails or Ashley cannot take the call, offer to take a message and use save_message. 6) At the end of any call, wish them a good day, for example 'Thanks for calling, I hope you have a lovely rest of your day.' Do not claim to be human or conceal that you are an AI if asked directly. Never mention the software vendors unless asked directly. Speak throughout in a consistent, natural British English accent, including from the very first greeting. Use a relaxed contemporary British female speaking style with British vowels and non-rhotic pronunciation. Do not use an American accent, American pronunciation or exaggerated theatrical British speech. Keep the accent stable throughout the entire conversation, with natural rhythm and calm conversational pacing. Sound like a friendly, capable woman in her thirties or forties. Sound relaxed and attentive rather than scripted or corporate. Use natural sentence lengths and gentle conversational pacing, with brief acknowledgements when useful. Allow callers time to think and finish speaking, including short pauses and hesitations; do not rush to fill silence or interrupt. If a caller starts speaking while you are talking, stop promptly and listen. Respond to the meaning of what they said rather than repeating a fixed script. Use light, appropriate small talk when the caller initiates it, but remain concise and professional. Avoid repetitive confirmations, excessive enthusiasm and unnecessary questions. Listen patiently through pauses, hesitations, spelled names and phone numbers; do not interrupt. Ask one question at a time and remember details already provided. Do not give financial advice or ask for account numbers, passwords, financial documents, or other sensitive financial information. During Monday-Friday 09:00-17:00 Europe/London, collect the caller's name and brief reason and explain that you will arrange for Ashley to speak with them. Follow the CALL FLOW above before transferring. Never claim the transfer completed merely because it was started. If the tool is unavailable or fails, apologise briefly and offer to take a callback message. Never offer to transfer to any other destination. Do not promise that Ashley will answer. Outside those hours take a message and explain it will be passed on when the office reopens. Do not promise a particular callback time. For callback numbers, prefer confirming caller ID when available, but do not claim to know caller ID unless it is explicitly provided. For any eleven-digit UK callback number, speak each digit individually in THREE DISTINCT groups: first five digits, a noticeable silent pause, next three digits, another noticeable silent pause, final three digits. Example: zero seven five two eight [pause] one eight five [pause] nine nine two. Do not say the word pause aloud. Use zero, not oh. Ask 'Have I got that right?' and wait for explicit confirmation. If the number is withheld, ask 'What's the best telephone number for Ashley to contact you on?' If caller ID is explicitly available, confirm only the last four digits first. Never invent a caller ID. If uncertain, ask for correction, never guess or invent a digit. Appointments may be requested for Tuesday, Wednesday, Thursday at 11:00 or 14:00 UK time: telephone 30 minutes with 2 hours' notice, Google Meet 60 minutes with 24 hours' notice, in-person 60 minutes with 48 hours' notice. IMPORTANT: Calendar lookup, booking, email sending and Google Meet creation are NOT YET IMPLEMENTED. You may take an appointment request but must never claim availability, a booking, email delivery or a Meet link has been confirmed. When you take a callback message, call the save_message tool once with the caller's name, confirmed callback number and brief topic. Only say the message has been saved if the tool returns saved:true; otherwise say the team will be told another way and never claim it was saved. If the caller needs financial advice, ask 'What in particular are you looking for help with?' If Ashley is unavailable, ask 'Before you go, is there anything in particular you would like to discuss with Ashley, so he can prepare for the call?' Collect the caller's name, confirmed callback number and brief topic without sensitive financial details. Thank them and wish them a lovely day. Only for fictional TEST calls: after confirming the callback number, use the send_callback_sms tool once to alert Ashley, if available. Never ask for sensitive financial information. Only say the SMS has been sent if the tool returns sent:true; this means accepted for sending, not necessarily delivered. If the tool fails, say the notification could not be sent, and do not promise a callback or claim to have saved the message. Transfers are only available through the request_screened_transfer test tool when configured; email and calendar bookings remain unavailable. The current calls are fictional test calls only.`;
 const BACKEND_PROMPT = 'Respond as Jess, briefly and professionally. Never invent tool results, or claim a transfer was completed when only attempted. Only transfer after the caller asks to speak to someone and confirms a callback number.';
 // Railway currently has legacy misspellings from the initial manual setup.
 const accountSid = process.env.TWILIO_ACCOUNT_SID || process.env.TWILLO_ACCOUNT_SID;
@@ -62,6 +62,21 @@ const TOOLS = [{
     name: 'request_screened_transfer',
     description: 'Only after the caller asks to speak to someone and their callback number has been confirmed. Initiate a screened transfer to the pre-approved owner mobile; never take a destination number from the caller.',
     parameters: { type: 'object', properties: {}, additionalProperties: false }
+}, {
+    type: 'function',
+    name: 'save_message',
+    description: 'Save a callback message for the team in the AKFA dashboard, once the caller has given their name, reason and a confirmed callback number. Use whenever a transfer fails or the caller prefers a message. Only say the message is saved if the result has saved: true.',
+    parameters: {
+        type: 'object',
+        properties: {
+            caller_name: { type: 'string', description: 'The caller name as stated' },
+            callback_number: { type: 'string', description: 'Confirmed callback number in international format, e.g. +447700900123' },
+            topic: { type: 'string', description: 'Brief non-sensitive reason for calling' },
+            preferred_time: { type: 'string', description: 'Preferred callback day/time if given (a request, never a confirmation)' }
+        },
+        required: ['caller_name', 'callback_number', 'topic'],
+        additionalProperties: false
+    }
 }];
 
 // The API key is for server-side calls only. Messages go solely to a number
@@ -161,6 +176,27 @@ async function startScreenedTransfer(callSid, receivingNumber) {
     }
 }
 
+// Signed bridge to the AKFA dashboard (Ed25519 over the exact raw body). Off unless both env vars are set.
+// Never awaited on the audio path; failures are logged without call content.
+const BRIDGE_URL = process.env.JESS_BRIDGE_URL || '';
+let bridgeKey = null;
+try { const k = process.env.JESS_BRIDGE_PRIVATE_KEY || ''; if (k) bridgeKey = createPrivateKey(k.includes('BEGIN') ? k.replace(/\\n/g, '\n') : { key: Buffer.from(k, 'base64'), format: 'der', type: 'pkcs8' }); }
+catch { console.error('JESS_BRIDGE_PRIVATE_KEY could not be read; bridge disabled'); }
+async function bridge(action, args, id) {
+    if (!BRIDGE_URL || !bridgeKey) return { ok: false, error: { code: 'bridge_disabled', message: 'Bridge not configured' } };
+    const raw = JSON.stringify({ id: id || ('req-' + randomBytes(12).toString('hex')), ts: Date.now(), action, args });
+    const signature = edSign(null, Buffer.from(raw), bridgeKey).toString('base64');
+    try {
+        const r = await fetch(BRIDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Jess-Signature': signature }, body: raw, signal: AbortSignal.timeout(5000) });
+        const j = await r.json().catch(() => ({ ok: false, error: { code: 'bad_reply', message: 'Unreadable reply' } }));
+        if (!j.ok) console.warn('Bridge', action, 'refused:', j.error?.code || r.status);
+        return j;
+    } catch { console.warn('Bridge', action, 'unreachable'); return { ok: false, error: { code: 'unreachable', message: 'Bridge unreachable' } }; }
+}
+const bridgeEvent = (eventType, callSid, extra = {}) => /^CA[0-9a-fA-F]{32}$/.test(callSid || '')
+    ? bridge('ingest_event', { eventType, callSid, eventId: callSid + ':' + eventType + (extra.seq !== undefined ? ':' + extra.seq : ''), eventTs: new Date().toISOString(), ...extra }, 'evt-' + callSid + '-' + eventType.replace('.', '_') + (extra.seq !== undefined ? '-' + extra.seq : ''))
+    : Promise.resolve(null);
+
 const fastify = Fastify();
 fastify.register(fastifyFormBody);
 fastify.register(fastifyWs);
@@ -177,7 +213,7 @@ fastify.all('/incoming-call', async (request, reply) => {
     const host = request.headers['x-forwarded-host'] || request.headers.host;
     const toNumber = String(request.body?.To || '');
     reply.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Pause length="9" />${RECORD_CALLS ? '<Start><Recording recordingChannels="dual" trim="do-not-trim" /></Start>' : ''}<Connect><Stream url="wss://${host}/media-stream"><Parameter name="twilio_to" value="${xmlEscape(toNumber)}" /></Stream></Connect></Response>`);
+<Response><Pause length="4" />${RECORD_CALLS ? '<Start><Recording recordingChannels="dual" trim="do-not-trim" /></Start>' : ''}<Connect><Stream url="wss://${host}/media-stream"><Parameter name="twilio_to" value="${xmlEscape(toNumber)}" /></Stream></Connect></Response>`);
 });
 const twimlReply = (reply, body) => reply.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>' + body);
 
@@ -210,7 +246,7 @@ fastify.post('/transfer-result', async (request, reply) => {
     if (transfer.state.accepted && String(request.body?.DialBridged) === 'true')
         return twimlReply(reply, '<Response><Hangup/></Response>');
     // An unanswered or declined call is returned to a NEW Jess session.
-    // Do not re-run the nine-second initial ringing delay.
+    // Do not re-run the initial delay.
     const domain = process.env.PUBLIC_BASE_URL;
     const streamUrl = 'wss://' + domain.slice(8) + '/media-stream';
     return twimlReply(reply, `<Response><Say language="en-GB">Sorry, Ashley couldn't take the call. I'll put you back through to Jess.</Say><Connect><Stream url="${xmlEscape(streamUrl)}"><Parameter name="twilio_to" value="${xmlEscape(transfer.state.receivingNumber)}" /><Parameter name="transfer_return" value="true" /></Stream></Connect></Response>`);
@@ -229,6 +265,8 @@ fastify.register(async (fastify) => {
         let transferReturn = false;
         let smsAlreadyAttempted = false;
         let transferAlreadyAttempted = false;
+        let messageAlreadySaved = false;
+        let callStartedAt = 0;
 
         const openAiWs = new WebSocket('wss://api.openai.com/v1/live/sessions', {
             headers: {
@@ -240,7 +278,9 @@ fastify.register(async (fastify) => {
         const send = (event) => {
             if (openAiWs.readyState === WebSocket.OPEN) openAiWs.send(JSON.stringify(event));
         };
+        let ended = false;
         const close = () => {
+            if (!ended && callStartedAt && !transferAlreadyAttempted) { ended = true; void bridgeEvent('call.status', twilioCallSid, { callStatus: 'completed', durationSec: Math.round((Date.now() - callStartedAt) / 1000) }); }
             sessionReady = false;
             connection.close();
             openAiWs.close();
@@ -251,6 +291,7 @@ fastify.register(async (fastify) => {
             if (sessionRequested || !streamSid || openAiWs.readyState !== WebSocket.OPEN) return;
             sessionRequested = true;
             const callerNumber = await getTwilioCallerId(twilioCallSid, twilioReceivingNumber);
+            if (!transferReturn) { callStartedAt = Date.now(); void bridgeEvent('call.started', twilioCallSid, { direction: 'inbound', from: callerNumber || 'anonymous', ...(isE164(twilioReceivingNumber) ? { to: twilioReceivingNumber } : {}), callStatus: 'in-progress' }); }
             if (connection.readyState !== WebSocket.OPEN || openAiWs.readyState !== WebSocket.OPEN) return;
             const callerContext = callerNumber
                 ? `Twilio's call record shows the incoming caller ID as ${callerNumber}. This is a network-provided number, not proof of identity. When collecting a callback number, first ask whether they are calling from the number ending in ${callerNumber.slice(-4)}. Do not read the full number aloud unless requested, and never rely on it to authenticate the caller. If they confirm, you can use the full caller ID as the callback number; if not, ask for their preferred number.`
@@ -300,12 +341,26 @@ fastify.register(async (fastify) => {
                             smsAlreadyAttempted = true; // no duplicate sends if the provider times out
                             output = await sendCallbackSms(JSON.parse(args || '{}'), twilioReceivingNumber);
                         }
+                    } else if (name === 'save_message') {
+                        if (messageAlreadySaved) {
+                            output = { saved: true, note: 'Message already saved on this call' };
+                        } else {
+                            const a = JSON.parse(args || '{}');
+                            const num = String(a.callback_number || '').replace(/[^\d+]/g, '').replace(/^0(?=\d{9,10}$)/, '+44');
+                            if (!isE164(num)) output = { saved: false, reason: 'Callback number not in a valid format; ask the caller to repeat it' };
+                            else {
+                                const r = await bridge('save_message', { callSid: twilioCallSid, callerName: cleanField(a.caller_name, 120) || 'Unknown caller', callbackNumber: num, topic: cleanField(a.topic, 1000) || 'Not stated', ...(a.preferred_time ? { preferredTime: cleanField(a.preferred_time, 200) } : {}), testMode: false }, 'msg-' + twilioCallSid);
+                                output = r && r.ok ? { saved: true } : { saved: false, reason: 'The dashboard could not save the message; say the team will be notified another way' };
+                                if (r && r.ok) messageAlreadySaved = true;
+                            }
+                        }
                     } else if (name === 'request_screened_transfer') {
                         if (transferAlreadyAttempted) {
                             output = { initiated: false, reason: 'Transfer already attempted on this call' };
                         } else {
                             transferAlreadyAttempted = true;
                             output = await startScreenedTransfer(twilioCallSid, twilioReceivingNumber);
+                            void bridgeEvent(output.initiated ? 'transfer.requested' : 'transfer.failed', twilioCallSid, output.initiated ? {} : { error: String(output.reason || '').slice(0, 200) });
                         }
                     }
                     send({ type: 'response.item.create',
